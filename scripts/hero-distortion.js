@@ -103,11 +103,17 @@ async function initHeroDistortion() {
   displacementSprite.height = app.screen.height;
   app.stage.addChild(displacementSprite);
 
-  const displacementFilter = new PIXI.DisplacementFilter({
+  // Create two separate displacement filters for current and next slides
+  const displacementFilterCurrent = new PIXI.DisplacementFilter({
     sprite: displacementSprite,
     scale: 0,
   });
-  app.stage.filters = [displacementFilter];
+  const displacementFilterNext = new PIXI.DisplacementFilter({
+    sprite: displacementSprite,
+    scale: 0,
+  });
+
+  const maxStrength = 80;
 
   let currentIndex = 0;
   let nextIndex = 1;
@@ -133,10 +139,14 @@ async function initHeroDistortion() {
     const dt = ticker.deltaMS / 1000;
     const time = ticker.lastTime / 1000;
 
-    displacementSprite.x = app.screen.width / 2 + Math.sin(time) * 50;
-    displacementSprite.y = app.screen.height / 2 + Math.cos(time * 0.6) * 30;
+    displacementSprite.x = app.screen.width / 2;
+    displacementSprite.y = app.screen.height / 2 + Math.sin(time * 0.8) * 1;
 
     if (!inTransition) {
+      // Remove filters when not transitioning
+      slides.forEach((slide) => {
+        slide.filters = null;
+      });
       elapsed += dt;
       if (isAutoplayEnabled && elapsed >= switchInterval) beginTransition();
       return;
@@ -144,12 +154,23 @@ async function initHeroDistortion() {
 
     transitionTime += dt;
     const t = Math.min(transitionTime / transitionDuration, 1);
-    const strength = 80 * Math.sin(t * Math.PI);
-    displacementFilter.scale.x = strength;
-    displacementFilter.scale.y = strength;
+    
+    // Outgoing slide: starts at 0 (undistorted), distorts as it fades out
+    const strengthOut = maxStrength * t;              // 0 → max
+    // Incoming slide: starts at max (distorted), ends at 0 (undistorted)
+    const strengthIn = maxStrength * (1 - t);         // max → 0
 
     const currentSlide = slides[currentIndex];
     const nextSlide = slides[nextIndex];
+
+    // Apply filters to respective slides
+    currentSlide.filters = [displacementFilterCurrent];
+    displacementFilterCurrent.scale.set(strengthOut, strengthOut);
+
+    nextSlide.filters = [displacementFilterNext];
+    displacementFilterNext.scale.set(strengthIn, strengthIn);
+
+    // Crossfade alpha
     currentSlide.alpha = 1 - t;
     nextSlide.alpha = t;
 
@@ -157,10 +178,13 @@ async function initHeroDistortion() {
       currentSlide.alpha = 0;
       nextSlide.alpha = 1;
 
+      // Remove filters after transition completes
+      currentSlide.filters = null;
+      nextSlide.filters = null;
+
       currentIndex = nextIndex;
       nextIndex = (currentIndex + 1) % slides.length;
       inTransition = false;
-      displacementFilter.scale.set(0, 0);
     }
   });
 
