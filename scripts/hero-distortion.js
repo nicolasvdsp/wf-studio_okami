@@ -18,13 +18,42 @@ async function initHeroDistortion() {
   });
   root.appendChild(app.canvas);
 
-  const slidesConfig = [
+  function inferSlideType(src) {
+    if (!src) return 'image';
+    const cleanSrc = src.split('?')[0];
+    const extension = cleanSrc.split('.').pop()?.toLowerCase() || '';
+    const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'm4v'];
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'avif', 'webp', 'gif'];
+    if (videoExtensions.includes(extension)) return 'video';
+    if (imageExtensions.includes(extension)) return 'image';
+    return 'image';
+  }
+
+  const listRoot = root.querySelector('[data-hero-distortion-image-list]');
+  const sourceElements = listRoot
+    ? Array.from(listRoot.querySelectorAll('[data-hero-distortion-image-source]'))
+    : [];
+
+  const cmsSlidesConfig = sourceElements
+    .map((el) => {
+      const src = el.getAttribute('src')?.trim();
+      if (!src) return null;
+      return {
+        type: inferSlideType(src),
+        src,
+      };
+    })
+    .filter(Boolean);
+
+  const fallbackSlidesConfig = [
     { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-nosetack_header.mp4' },
-    { type: 'image', src: 'https://cdn.prod.website-files.com/69171be02eed206b0102f9b9/69172d804fa7b36d0157d9ac_ruin_house-cover.webp'},
+    { type: 'image', src: 'https://cdn.prod.website-files.com/69171be02eed206b0102f9b9/69172d804fa7b36d0157d9ac_ruin_house-cover.webp' },
     { type: 'image', src: 'https://cdn.prod.website-files.com/68d14433cd550114f9ff7c1f/691b2bc40cbc606506067271_20251105-DSC05265-2_websize.jpg' },
     { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-milstack_header.mp4' },
     { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-owlstack_header.mp4' },
   ];
+
+  const slidesConfig = cmsSlidesConfig.length ? cmsSlidesConfig : fallbackSlidesConfig;
 
   async function loadSlideTexture(slide) {
     if (slide.type === 'video') {
@@ -64,7 +93,9 @@ async function initHeroDistortion() {
     app.stage.addChild(sprite);
   });
 
-  const displacementTexture = await PIXI.Assets.load('images/displacement-map.png');
+  const displacementImgEl = root.querySelector('[data-hero-distortion-displacement_map]');
+  const displacementSrc = displacementImgEl?.getAttribute('src') || 'https://cdn.prod.fasfswebsite-files.com/69171be02eed206b0102f9b0/691dde12f3d23dc0d263f461_displacement-map.png';
+  const displacementTexture = await PIXI.Assets.load(displacementSrc);
   const displacementSprite = new PIXI.Sprite(displacementTexture);
   displacementSprite.anchor.set(0.5);
   displacementSprite.position.set(app.screen.width / 2, app.screen.height / 2);
