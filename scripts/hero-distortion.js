@@ -1,0 +1,196 @@
+async function initHeroDistortion() {
+  const root = document.querySelector('[data-hero-distortion-init]');
+  if (!root) return;
+
+  const autoplayAttr = root.getAttribute('data-hero-distortion-autoplay');
+  const intervalAttr = root.getAttribute('data-hero-distortion-interval');
+
+  const isAutoplayEnabled = autoplayAttr === null ? true : autoplayAttr !== 'false';
+  const switchInterval = intervalAttr && !Number.isNaN(parseFloat(intervalAttr))
+    ? parseFloat(intervalAttr)
+    : 6;
+
+  const app = new PIXI.Application();
+  await app.init({
+    resizeTo: window,
+    background: '#000000',
+    antialias: true,
+  });
+  root.appendChild(app.canvas);
+
+  const slidesConfig = [
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-nosetack_header.mp4' },
+    { type: 'image', src: 'https://cdn.prod.website-files.com/69171be02eed206b0102f9b9/69172d804fa7b36d0157d9ac_ruin_house-cover.webp'},
+    { type: 'image', src: 'https://cdn.prod.website-files.com/68d14433cd550114f9ff7c1f/691b2bc40cbc606506067271_20251105-DSC05265-2_websize.jpg' },
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-milstack_header.mp4' },
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-owlstack_header.mp4' },
+  ];
+
+  async function loadSlideTexture(slide) {
+    if (slide.type === 'video') {
+      return PIXI.Assets.load({
+        src: slide.src,
+        data: { autoPlay: true, autoLoad: true, loop: true, muted: true },
+        loadParser: 'loadVideo',
+      });
+    }
+    return PIXI.Assets.load(slide.src);
+  }
+
+  const slideTextures = await Promise.all(slidesConfig.map(loadSlideTexture));
+
+  function fitSpriteToScreen(sprite) {
+    const tex = sprite.texture;
+    if (!tex || !tex.width || !tex.height) return;
+
+    const screenW = app.screen.width;
+    const screenH = app.screen.height;
+    const scale = Math.max(screenW / tex.width, screenH / tex.height);
+
+    sprite.width = tex.width * scale;
+    sprite.height = tex.height * scale;
+    sprite.anchor.set(0.5);
+    sprite.position.set(screenW / 2, screenH / 2);
+  }
+
+  const slides = slideTextures.map((tex) => {
+    const sprite = new PIXI.Sprite(tex);
+    fitSpriteToScreen(sprite);
+    return sprite;
+  });
+
+  slides.forEach((sprite, i) => {
+    sprite.alpha = i === 0 ? 1 : 0;
+    app.stage.addChild(sprite);
+  });
+
+  const displacementTexture = await PIXI.Assets.load('images/displacement-map.png');
+  const displacementSprite = new PIXI.Sprite(displacementTexture);
+  displacementSprite.anchor.set(0.5);
+  displacementSprite.position.set(app.screen.width / 2, app.screen.height / 2);
+  displacementSprite.width = app.screen.width;
+  displacementSprite.height = app.screen.height;
+  app.stage.addChild(displacementSprite);
+
+  const displacementFilter = new PIXI.DisplacementFilter({
+    sprite: displacementSprite,
+    scale: 0,
+  });
+  app.stage.filters = [displacementFilter];
+
+  let currentIndex = 0;
+  let nextIndex = 1;
+  const transitionDuration = 0.8;
+
+  let elapsed = 0;
+  let transitionTime = 0;
+  let inTransition = false;
+
+  function resetIntervalTimer() {
+    elapsed = 0;
+  }
+
+  function beginTransition(step = 1) {
+    if (inTransition) return;
+    nextIndex = (currentIndex + step + slides.length) % slides.length;
+    inTransition = true;
+    resetIntervalTimer();
+    transitionTime = 0;
+  }
+
+  app.ticker.add((ticker) => {
+    const dt = ticker.deltaMS / 1000;
+    const time = ticker.lastTime / 1000;
+
+    displacementSprite.x = app.screen.width / 2 + Math.sin(time) * 50;
+    displacementSprite.y = app.screen.height / 2 + Math.cos(time * 0.6) * 30;
+
+    if (!inTransition) {
+      elapsed += dt;
+      if (isAutoplayEnabled && elapsed >= switchInterval) beginTransition();
+      return;
+    }
+
+    transitionTime += dt;
+    const t = Math.min(transitionTime / transitionDuration, 1);
+    const strength = 80 * Math.sin(t * Math.PI);
+    displacementFilter.scale.x = strength;
+    displacementFilter.scale.y = strength;
+
+    const currentSlide = slides[currentIndex];
+    const nextSlide = slides[nextIndex];
+    currentSlide.alpha = 1 - t;
+    nextSlide.alpha = t;
+
+    if (t >= 1) {
+      currentSlide.alpha = 0;
+      nextSlide.alpha = 1;
+
+      currentIndex = nextIndex;
+      nextIndex = (currentIndex + 1) % slides.length;
+      inTransition = false;
+      displacementFilter.scale.set(0, 0);
+    }
+  });
+
+  let scrollCooldown = false;
+
+  function triggerScrollTransition(step) {
+    if (scrollCooldown) return;
+    beginTransition(step);
+    scrollCooldown = true;
+    setTimeout(() => {
+      scrollCooldown = false;
+    }, transitionDuration * 1000);
+  }
+
+  const wheelTriggerThreshold = 60;
+  let wheelDeltaAccumulator = 0;
+  let wheelResetTimeout = null;
+
+  window.addEventListener('wheel', (event) => {
+    wheelDeltaAccumulator += event.deltaY;
+
+    if (Math.abs(wheelDeltaAccumulator) >= wheelTriggerThreshold) {
+      const direction = wheelDeltaAccumulator > 0 ? 1 : -1;
+      triggerScrollTransition(direction);
+      wheelDeltaAccumulator = 0;
+    }
+
+    clearTimeout(wheelResetTimeout);
+    wheelResetTimeout = setTimeout(() => {
+      wheelDeltaAccumulator = 0;
+    }, 200);
+  }, { passive: true });
+
+  let lastTouchY = null;
+
+  window.addEventListener('touchstart', (event) => {
+    lastTouchY = event.touches[0].clientY;
+  }, { passive: true });
+
+  window.addEventListener('touchmove', (event) => {
+    if (lastTouchY === null) return;
+    const currentY = event.touches[0].clientY;
+    const direction = currentY < lastTouchY ? 1 : -1;
+    triggerScrollTransition(direction);
+    lastTouchY = currentY;
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    lastTouchY = null;
+  });
+
+  window.addEventListener('resize', () => {
+    slides.forEach(fitSpriteToScreen);
+    displacementSprite.position.set(app.screen.width / 2, app.screen.height / 2);
+    displacementSprite.width = app.screen.width;
+    displacementSprite.height = app.screen.height;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('contentload', initHeroDistortion);
+  // optionally run immediately on initial load:
+  initHeroDistortion();
+});
