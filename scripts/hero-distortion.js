@@ -113,11 +113,11 @@ async function initHeroDistortion() {
     scale: 0,
   });
 
-  const maxStrength = 80;
+  const maxStrength = 40;
 
   let currentIndex = 0;
   let nextIndex = 1;
-  const transitionDuration = 0.8;
+  const transitionDuration = 0.55;
 
   let elapsed = 0;
   let transitionTime = 0;
@@ -140,7 +140,7 @@ async function initHeroDistortion() {
     const time = ticker.lastTime / 1000;
 
     displacementSprite.x = app.screen.width / 2;
-    displacementSprite.y = app.screen.height / 2 + Math.sin(time * 0.8) * 1;
+    displacementSprite.y = app.screen.height / 2;
 
     if (!inTransition) {
       // Remove filters when not transitioning
@@ -155,10 +155,13 @@ async function initHeroDistortion() {
     transitionTime += dt;
     const t = Math.min(transitionTime / transitionDuration, 1);
     
+    // Easing function for smooth transitions (ease-in-out)
+    const easeInOut = t * t * (3 - 2 * t);
+    
     // Outgoing slide: starts at 0 (undistorted), distorts as it fades out
-    const strengthOut = maxStrength * t;              // 0 → max
+    const strengthOut = maxStrength * easeInOut;              // 0 → max (eased)
     // Incoming slide: starts at max (distorted), ends at 0 (undistorted)
-    const strengthIn = maxStrength * (1 - t);         // max → 0
+    const strengthIn = maxStrength * (1 - easeInOut);         // max → 0 (eased)
 
     const currentSlide = slides[currentIndex];
     const nextSlide = slides[nextIndex];
@@ -170,9 +173,9 @@ async function initHeroDistortion() {
     nextSlide.filters = [displacementFilterNext];
     displacementFilterNext.scale.set(strengthIn, strengthIn);
 
-    // Crossfade alpha
-    currentSlide.alpha = 1 - t;
-    nextSlide.alpha = t;
+    // Crossfade alpha (eased for smooth transition)
+    currentSlide.alpha = 1 - easeInOut;
+    nextSlide.alpha = easeInOut;
 
     if (t >= 1) {
       currentSlide.alpha = 0;
