@@ -29,21 +29,64 @@ async function initHeroDistortion() {
     return 'image';
   }
 
-  const listRoot = root.querySelector('[data-hero-distortion-image-list]');
-  const sourceElements = listRoot
-    ? Array.from(listRoot.querySelectorAll('[data-hero-distortion-image-source]'))
-    : [];
+  function extractVideoSrc(element) {
+    if (!element) return '';
+    return (
+      element.getAttribute('data-hero-video-src') ||
+      element.getAttribute('src') ||
+      element.textContent?.trim() ||
+      ''
+    );
+  }
 
-  const cmsSlidesConfig = sourceElements
-    .map((el) => {
-      const src = el.getAttribute('src')?.trim();
-      if (!src) return null;
-      return {
-        type: inferSlideType(src),
-        src,
-      };
-    })
-    .filter(Boolean);
+  function extractImageSrc(element) {
+    if (!element) return '';
+    return element.getAttribute('src')?.trim() || '';
+  }
+
+  const listRoot = root.querySelector('[data-hero-distortion-image-list]');
+  let cmsSlidesConfig = [];
+
+  if (listRoot) {
+    const itemElements = Array.from(
+      listRoot.querySelectorAll('[data-hero-distortion-source]')
+    );
+
+    cmsSlidesConfig = itemElements
+      .map((item) => {
+        const videoEl = item.querySelector('[data-hero-distortion-video-source]');
+        const imageEl = item.querySelector('[data-hero-distortion-image-source]');
+
+        const videoSrc = extractVideoSrc(videoEl);
+        const imageSrc = extractImageSrc(imageEl);
+
+        if (videoSrc) {
+          return { type: 'video', src: videoSrc };
+        }
+        if (imageSrc) {
+          return { type: inferSlideType(imageSrc), src: imageSrc };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    // Legacy fallback: allow direct image elements without wrapper
+    if (!cmsSlidesConfig.length) {
+      const legacyImageEls = Array.from(
+        listRoot.querySelectorAll('[data-hero-distortion-image-source]')
+      );
+      cmsSlidesConfig = legacyImageEls
+        .map((el) => {
+          const src = extractImageSrc(el);
+          if (!src) return null;
+          return {
+            type: inferSlideType(src),
+            src,
+          };
+        })
+        .filter(Boolean);
+    }
+  }
 
   const fallbackSlidesConfig = [
     { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-nosetack_header.mp4' },
