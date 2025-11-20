@@ -290,8 +290,10 @@ async function initHeroDistortion() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.addEventListener('contentload', initHeroDistortion);
-  // optionally run immediately on initial load:
-  initHeroDistortion();
-});
+// Initialize - works whether script loads early or late
+document.addEventListener('contentload', 
+  initHeroDistortion
+);
+
+console.log("dev");
+initHeroDistortion();
