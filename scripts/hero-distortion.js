@@ -60,11 +60,70 @@ async function initHeroDistortion() {
         const videoSrc = extractVideoSrc(videoEl);
         const imageSrc = extractImageSrc(imageEl);
 
+        // Extract all text fields using data-hero-text="key" pattern
+        // All data must be within the [data-hero-distortion-source] wrapper
+        const textData = {};
+        
+        // Check item itself for data-hero-text attribute (value in text content)
+        const itemTextKey = item.getAttribute('data-hero-text');
+        if (itemTextKey) {
+          textData[itemTextKey] = item.textContent?.trim() || '';
+        }
+        
+        // Also check item itself for data-hero-text-* attributes (value in attribute)
+        // e.g., data-hero-text-year="2024"
+        Array.from(item.attributes).forEach(attr => {
+          if (attr.name.startsWith('data-hero-text-')) {
+            const key = attr.name.replace('data-hero-text-', '');
+            if (attr.value) {
+              textData[key] = attr.value;
+            }
+          }
+        });
+        
+        // Scan elements inside the source div (all data must be within the source wrapper)
+        const foundTextElements = [];
+        item.querySelectorAll('[data-hero-text]').forEach(el => {
+          const key = el.getAttribute('data-hero-text');
+          if (key) {
+            const textContent = el.textContent || '';
+            const innerText = el.innerText || '';
+            const trimmed = textContent.trim();
+            
+            foundTextElements.push({
+              key,
+              textContent: textContent.substring(0, 50), // First 50 chars for debugging
+              innerText: innerText.substring(0, 50),
+              trimmed,
+              hasContent: !!trimmed
+            });
+            
+            // Use text content as the value (these are hidden data source elements)
+            if (trimmed) {
+              textData[key] = trimmed;
+            }
+          }
+        });
+
+        const slideData = {
+          ...textData
+        };
+
+        // Log all extracted data for debugging
+        console.log('Extracted slide data:', {
+          hasVideo: !!videoSrc,
+          hasImage: !!imageSrc,
+          foundTextElements: foundTextElements,
+          textFields: slideData,
+          textFieldCount: Object.keys(slideData).length,
+          itemHTML: item.outerHTML.substring(0, 200) // First 200 chars of HTML
+        });
+
         if (videoSrc) {
-          return { type: 'video', src: videoSrc };
+          return { type: 'video', src: videoSrc, ...slideData };
         }
         if (imageSrc) {
-          return { type: inferSlideType(imageSrc), src: imageSrc };
+          return { type: inferSlideType(imageSrc), src: imageSrc, ...slideData };
         }
         return null;
       })
@@ -89,11 +148,11 @@ async function initHeroDistortion() {
   }
 
   const fallbackSlidesConfig = [
-    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-nosetack_header.mp4' },
-    { type: 'image', src: 'https://cdn.prod.website-files.com/69171be02eed206b0102f9b9/69172d804fa7b36d0157d9ac_ruin_house-cover.webp' },
-    { type: 'image', src: 'https://cdn.prod.website-files.com/68d14433cd550114f9ff7c1f/691b2bc40cbc606506067271_20251105-DSC05265-2_websize.jpg' },
-    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-milstack_header.mp4' },
-    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-owlstack_header.mp4' },
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-nosetack_header.mp4', title: 'Nose Stack', description: 'Project description' },
+    { type: 'image', src: 'https://cdn.prod.website-files.com/69171be02eed206b0102f9b9/69172d804fa7b36d0157d9ac_ruin_house-cover.webp', title: 'Ruin House', description: 'Project description' },
+    { type: 'image', src: 'https://cdn.prod.website-files.com/68d14433cd550114f9ff7c1f/691b2bc40cbc606506067271_20251105-DSC05265-2_websize.jpg', title: 'Project Title', description: 'Project description' },
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-milstack_header.mp4', title: 'Mil Stack', description: 'Project description' },
+    { type: 'video', src: 'https://the-mothership-collective.s3.eu-north-1.amazonaws.com/case-owlstack_header.mp4', title: 'Owl Stack', description: 'Project description' },
   ];
 
   const slidesConfig = cmsSlidesConfig.length ? cmsSlidesConfig : fallbackSlidesConfig;
@@ -162,6 +221,51 @@ async function initHeroDistortion() {
   let nextIndex = 1;
   const transitionDuration = 0.55;
 
+  // Find all target elements with data-hero-text-target="key" (these are the display elements)
+  // Title, description, and all other text fields use this same system
+  const customTextElements = {};
+  
+  function findTargetElements(container) {
+    container.querySelectorAll('[data-hero-text-target]').forEach(el => {
+      const key = el.getAttribute('data-hero-text-target');
+      if (key) {
+        // Prefer elements inside root, but allow document-wide targets too
+        if (!customTextElements[key] || 
+            (root.contains(customTextElements[key]) && !root.contains(el))) {
+          customTextElements[key] = el;
+        }
+      }
+    });
+  }
+  
+  // Scan root container first (priority)
+  findTargetElements(root);
+  // Then scan document-wide for any targets we missed
+  findTargetElements(document);
+
+  // Function to update text content with fade transition
+  function updateTextContent(newSlideIndex, transitionProgress = 1) {
+    const newSlide = slidesConfig[newSlideIndex];
+    if (!newSlide) return;
+
+    // Always update text content immediately (for smooth crossfade effect)
+    // Fade opacity based on transition progress
+    // Updates all text fields (title, description, and any custom fields) using the same system
+    
+    Object.keys(customTextElements).forEach(key => {
+      if (newSlide[key] !== undefined) {
+        const el = customTextElements[key];
+        if (el) {
+          el.textContent = newSlide[key];
+          el.style.opacity = transitionProgress;
+        }
+      }
+    });
+  }
+
+  // Initialize text for first slide
+  updateTextContent(0, 1);
+
   let elapsed = 0;
   let transitionTime = 0;
   let inTransition = false;
@@ -220,6 +324,9 @@ async function initHeroDistortion() {
     currentSlide.alpha = 1 - easeInOut;
     nextSlide.alpha = easeInOut;
 
+    // Update text content during transition (fade from old to new)
+    updateTextContent(nextIndex, easeInOut);
+
     if (t >= 1) {
       currentSlide.alpha = 0;
       nextSlide.alpha = 1;
@@ -231,6 +338,9 @@ async function initHeroDistortion() {
       currentIndex = nextIndex;
       nextIndex = (currentIndex + 1) % slides.length;
       inTransition = false;
+      
+      // Finalize text content after transition completes
+      updateTextContent(currentIndex, 1);
     }
   });
 
@@ -295,5 +405,5 @@ document.addEventListener('contentload',
   initHeroDistortion
 );
 
-console.log("dev");
+
 initHeroDistortion();
