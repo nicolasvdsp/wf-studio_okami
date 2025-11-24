@@ -421,21 +421,34 @@ async function initHeroDistortion() {
   });
 
   let scrollCooldown = false;
+  let scrollCooldownTimer = null;
+  let wheelDeltaAccumulator = 0;
+  let wheelResetTimeout = null;
+  let lastTouchY = null;
+  const scrollDebounceMs =
+    parseFloat(root.getAttribute('data-hero-scroll-debounce')) ||
+    Math.max(transitionDuration * 2000 + 250, 900);
 
   function triggerScrollTransition(step) {
     if (scrollCooldown) return;
     beginTransition(step);
     scrollCooldown = true;
-    setTimeout(() => {
+    if (scrollCooldownTimer) clearTimeout(scrollCooldownTimer);
+    scrollCooldownTimer = setTimeout(() => {
       scrollCooldown = false;
-    }, transitionDuration * 1000);
+      scrollCooldownTimer = null;
+    }, scrollDebounceMs);
+    wheelDeltaAccumulator = 0;
+    if (wheelResetTimeout) {
+      clearTimeout(wheelResetTimeout);
+      wheelResetTimeout = null;
+    }
   }
 
   const wheelTriggerThreshold = 60;
-  let wheelDeltaAccumulator = 0;
-  let wheelResetTimeout = null;
 
   window.addEventListener('wheel', (event) => {
+    if (scrollCooldown) return;
     wheelDeltaAccumulator += event.deltaY;
 
     if (Math.abs(wheelDeltaAccumulator) >= wheelTriggerThreshold) {
@@ -447,17 +460,16 @@ async function initHeroDistortion() {
     clearTimeout(wheelResetTimeout);
     wheelResetTimeout = setTimeout(() => {
       wheelDeltaAccumulator = 0;
-    }, 200);
+      wheelResetTimeout = null;
+    }, Math.max(200, scrollDebounceMs * 0.5));
   }, { passive: true });
-
-  let lastTouchY = null;
 
   window.addEventListener('touchstart', (event) => {
     lastTouchY = event.touches[0].clientY;
   }, { passive: true });
 
   window.addEventListener('touchmove', (event) => {
-    if (lastTouchY === null) return;
+    if (lastTouchY === null || scrollCooldown) return;
     const currentY = event.touches[0].clientY;
     const direction = currentY < lastTouchY ? 1 : -1;
     triggerScrollTransition(direction);
