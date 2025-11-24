@@ -287,7 +287,7 @@ async function initHeroDistortion() {
     });
   }
 
-  function triggerSplitWordTransitions(fromIndex, toIndex) {
+  function triggerSplitWordTransitions(fromIndex, toIndex, direction = 1) {
     Object.keys(textWordRegistry).forEach((key) => {
       const registry = textWordRegistry[key];
       if (!registry || !registry.splits?.length) return;
@@ -303,9 +303,13 @@ async function initHeroDistortion() {
 
       const currentSplit = splits[fromIndex];
       const nextSplit = splits[toIndex];
+      const isForward = direction >= 0;
+      const nextStart = isForward ? 100 : -100;
+      const currentEnd = isForward ? -100 : 100;
+
       gsap.timeline()
-        .set(nextSplit.chars, { yPercent: 100 }, 0)
-        .to(currentSplit.chars, { yPercent: -100, duration, stagger, ease }, 0)
+        .set(nextSplit.chars, { yPercent: nextStart }, 0)
+        .to(currentSplit.chars, { yPercent: currentEnd, duration, stagger, ease }, 0)
         .to(nextSplit.chars, { yPercent: 0, duration, stagger, ease }, 0);
 
       registry.activeIndex = toIndex;
@@ -347,7 +351,8 @@ async function initHeroDistortion() {
     resetIntervalTimer();
     transitionTime = 0;
     if (useSplitTextAnimations) {
-      triggerSplitWordTransitions(currentIndex, nextIndex);
+      const direction = step === 0 ? 1 : Math.sign(step);
+      triggerSplitWordTransitions(currentIndex, nextIndex, direction);
     }
   }
 
