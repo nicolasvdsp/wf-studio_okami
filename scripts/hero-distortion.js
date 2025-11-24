@@ -46,16 +46,20 @@ async function initHeroDistortion() {
 
   function collectTextSequencesFromDom(items) {
     const sequences = {};
-    items.forEach((item) => {
+    items.forEach((item, index) => {
       item.querySelectorAll('[data-hero-text]').forEach((textEl) => {
         const key = textEl.getAttribute('data-hero-text');
         if (!key) return;
-        const value = textEl.textContent?.trim();
+        let value = textEl.textContent?.trim();
+        if ((!value || !value.length) && key === 'pagination') {
+          value = String(index + 1);
+        }
         if (!value) return;
         if (!sequences[key]) sequences[key] = [];
         sequences[key].push(value);
       });
     });
+    ensurePaginationSequence(sequences, items.length);
     return sequences;
   }
 
@@ -70,7 +74,15 @@ async function initHeroDistortion() {
         sequences[key].push(value);
       });
     });
+    ensurePaginationSequence(sequences, slides.length);
     return sequences;
+  }
+
+  function ensurePaginationSequence(sequences, length) {
+    if (!length) return;
+    if (!sequences.pagination || sequences.pagination.length !== length) {
+      sequences.pagination = Array.from({ length }, (_, i) => String(i + 1));
+    }
   }
 
   const listRoot = root.querySelector('[data-hero-distortion-image-list]');
@@ -82,7 +94,7 @@ async function initHeroDistortion() {
 
   if (itemElements.length) {
     cmsSlidesConfig = itemElements
-      .map((item) => {
+      .map((item, itemIndex) => {
         const videoEl = item.querySelector('[data-hero-distortion-video-source]');
         const imageEl = item.querySelector('[data-hero-distortion-image-source]');
 
@@ -92,10 +104,16 @@ async function initHeroDistortion() {
         const textData = {};
         item.querySelectorAll('[data-hero-text]').forEach((textEl) => {
           const key = textEl.getAttribute('data-hero-text');
-          const value = textEl.textContent?.trim();
+          let value = textEl.textContent?.trim();
+          if ((!value || !value.length) && key === 'pagination') {
+            value = String(itemIndex + 1);
+          }
           if (!key || !value) return;
           textData[key] = value;
         });
+        if (!textData.pagination) {
+          textData.pagination = String(itemIndex + 1);
+        }
 
         if (videoSrc) {
           return { type: 'video', src: videoSrc, ...textData };
@@ -134,6 +152,7 @@ async function initHeroDistortion() {
   ];
 
   const slidesConfig = cmsSlidesConfig.length ? cmsSlidesConfig : fallbackSlidesConfig;
+  const slideCount = slidesConfig.length;
 
   const textSequencesByKey = itemElements.length
     ? collectTextSequencesFromDom(itemElements)
@@ -234,7 +253,12 @@ async function initHeroDistortion() {
   if (canUseSplitText) {
     buildTextWordRegistry();
     if (Object.keys(textWordRegistry).length) {
+      initPaginationTotals();
       setupSplitTextWords();
+      // Initialize pagination to show first slide
+      if (textWordRegistry['pagination']) {
+        updatePaginationNumbers(0);
+      }
       useSplitTextAnimations = true;
     }
   }
@@ -262,10 +286,17 @@ async function initHeroDistortion() {
         node.setAttribute('data-hero-text-word', '');
         node.classList.add('hero-text-word');
         inheritedClasses.forEach((cls) => node.classList.add(cls));
+        // Ensure absolute positioning for stacking (like GSAP example)
+        node.style.cssText += 'position:absolute;top:0;left:0;';
         node.textContent = word;
         wrapper.appendChild(node);
         return node;
       });
+      
+      // Ensure wrapper has proper CSS for masking
+      if (!wrapper.style.position) {
+        wrapper.style.cssText += 'position:relative;overflow:hidden;';
+      }
 
       textWordRegistry[key] = {
         wrapper,
@@ -273,7 +304,119 @@ async function initHeroDistortion() {
         splits: [],
         activeIndex: 0,
       };
+
+      if (key === 'pagination') {
+        // Check for existing static slash/total as siblings (outside wrapper)
+        const parent = wrapper.parentElement;
+        if (parent) {
+          // Find existing slash span (sibling of wrapper)
+          let slashEl = Array.from(parent.children).find(
+            (el) =>
+              el !== wrapper &&
+              (el.classList.contains('hero-text-pagination-slash') ||
+                el.getAttribute('data-hero-pagination-slash') !== null)
+          );
+          
+          // Find existing total span (sibling of wrapper)
+          let totalEl = Array.from(parent.children).find(
+            (el) =>
+              el !== wrapper &&
+              (el.classList.contains('hero-text-pagination-total') ||
+                el.getAttribute('data-hero-pagination-total') !== null)
+          );
+
+          // If slash exists, update it; otherwise create inside wrapper
+          if (slashEl) {
+            slashEl.textContent =
+              slashEl.getAttribute('data-hero-pagination-slash') ||
+              wrapper.getAttribute('data-hero-pagination-slash') ||
+              '/';
+          } else {
+            const slash = document.createElement('span');
+            slash.className = 'hero-text-pagination-slash';
+            slash.textContent =
+              wrapper.getAttribute('data-hero-pagination-slash') || '/';
+            wrapper.appendChild(slash);
+          }
+
+          // If total exists, update it; otherwise create inside wrapper
+          if (totalEl) {
+            totalEl.textContent = String(slideCount);
+          } else {
+            const total = document.createElement('span');
+            total.className = 'hero-text-pagination-total';
+            total.textContent = String(slideCount);
+            wrapper.appendChild(total);
+          }
+        } else {
+          // Fallback: create inside wrapper if no parent
+          const slash = document.createElement('span');
+          slash.className = 'hero-text-pagination-slash';
+          slash.textContent =
+            wrapper.getAttribute('data-hero-pagination-slash') || '/';
+          const total = document.createElement('span');
+          total.className = 'hero-text-pagination-total';
+          total.textContent = String(slideCount);
+          wrapper.appendChild(slash);
+          wrapper.appendChild(total);
+        }
+      }
     });
+  }
+
+  function initPaginationTotals() {
+    Object.keys(customTextElements).forEach((key) => {
+      if (key !== 'pagination') return;
+      const wrapper = customTextElements[key];
+      const parent = wrapper.parentElement;
+      
+      // Check inside wrapper first
+      let totalEl =
+        wrapper.querySelector('.hero-text-pagination-total') ||
+        wrapper.querySelector('[data-hero-pagination-total]');
+      
+      // If not found, check siblings
+      if (!totalEl && parent) {
+        totalEl = Array.from(parent.children).find(
+          (el) =>
+            el !== wrapper &&
+            (el.classList.contains('hero-text-pagination-total') ||
+              el.getAttribute('data-hero-pagination-total') !== null)
+        );
+      }
+      
+      if (totalEl) totalEl.textContent = String(slideCount);
+    });
+  }
+
+  function updatePaginationNumbers(activeIndex) {
+    const registry = textWordRegistry['pagination'];
+    if (!registry) return;
+    const index = ((activeIndex % slideCount) + slideCount) % slideCount;
+    
+    // Don't change textContent after SplitText - just update active class
+    registry.wordNodes.forEach((node, i) => {
+      node.classList.toggle('is-active', i === index);
+    });
+    
+    // Update total - check inside wrapper first, then siblings
+    const wrapper = registry.wrapper;
+    const parent = wrapper.parentElement;
+    let totalEl =
+      wrapper.querySelector('.hero-text-pagination-total') ||
+      wrapper.querySelector('[data-hero-pagination-total]');
+    
+    if (!totalEl && parent) {
+      totalEl = Array.from(parent.children).find(
+        (el) =>
+          el !== wrapper &&
+          (el.classList.contains('hero-text-pagination-total') ||
+            el.getAttribute('data-hero-pagination-total') !== null)
+      );
+    }
+    
+    if (totalEl) totalEl.textContent = String(slideCount);
+    registry.activeIndex = index;
   }
 
   function setupSplitTextWords() {
@@ -281,7 +424,11 @@ async function initHeroDistortion() {
       const registry = textWordRegistry[key];
       registry.splits = registry.wordNodes.map((wordNode, index) => {
         const split = new SplitText(wordNode, { type: 'chars' });
-        gsap.set(split.chars, { yPercent: index === 0 ? 0 : 100 });
+        // First word visible (yPercent: 0), all others hidden below (yPercent: 100)
+        gsap.set(split.chars, { 
+          yPercent: index === 0 ? 0 : 100,
+          immediateRender: true 
+        });
         return split;
       });
     });
@@ -297,8 +444,11 @@ async function initHeroDistortion() {
 
       const duration =
         parseFloat(wrapper.getAttribute('data-hero-text-duration')) || transitionDuration;
+      // Support both data-hero-text-stagger and data-hero-stagger
       const stagger =
-        parseFloat(wrapper.getAttribute('data-hero-text-stagger')) || 0;
+        parseFloat(wrapper.getAttribute('data-hero-text-stagger')) ||
+        parseFloat(wrapper.getAttribute('data-hero-stagger')) ||
+        0.01;
       const ease = wrapper.getAttribute('data-hero-text-ease') || 'power1.inOut';
 
       const currentSplit = splits[fromIndex];
@@ -313,6 +463,7 @@ async function initHeroDistortion() {
         .to(nextSplit.chars, { yPercent: 0, duration, stagger, ease }, 0);
 
       registry.activeIndex = toIndex;
+      if (key === 'pagination') updatePaginationNumbers(toIndex);
     });
   }
 
@@ -330,6 +481,49 @@ async function initHeroDistortion() {
         }
       }
     });
+
+    if (customTextElements['pagination']) {
+      const paginationEl = customTextElements['pagination'];
+      const parent = paginationEl.parentElement;
+      
+      // Find total - check inside wrapper first, then siblings
+      let totalEl =
+        paginationEl.querySelector('.hero-text-pagination-total') ||
+        paginationEl.querySelector('[data-hero-pagination-total]');
+      if (!totalEl && parent) {
+        totalEl = Array.from(parent.children).find(
+          (el) =>
+            el !== paginationEl &&
+            (el.classList.contains('hero-text-pagination-total') ||
+              el.getAttribute('data-hero-pagination-total') !== null)
+        );
+      }
+      
+      // Find slash - check inside wrapper first, then siblings
+      let slashEl =
+        paginationEl.querySelector('.hero-text-pagination-slash') ||
+        paginationEl.querySelector('[data-hero-pagination-slash]');
+      if (!slashEl && parent) {
+        slashEl = Array.from(parent.children).find(
+          (el) =>
+            el !== paginationEl &&
+            (el.classList.contains('hero-text-pagination-slash') ||
+              el.getAttribute('data-hero-pagination-slash') !== null)
+        );
+      }
+      
+      if (totalEl) totalEl.textContent = String(slideCount);
+      if (slashEl) {
+        slashEl.textContent =
+          slashEl.getAttribute('data-hero-pagination-slash') ||
+          paginationEl.getAttribute('data-hero-pagination-slash') ||
+          '/';
+      }
+      const numberEl =
+        paginationEl.querySelector('[data-hero-text-word], .hero-text-word') ||
+        paginationEl.querySelector('.hero-text-word');
+      if (numberEl) numberEl.textContent = String((newSlideIndex % slideCount) + 1);
+    }
   }
 
   if (!useSplitTextAnimations) {
