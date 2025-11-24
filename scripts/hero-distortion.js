@@ -44,14 +44,43 @@ async function initHeroDistortion() {
     return element.getAttribute('src')?.trim() || '';
   }
 
+  function collectTextSequencesFromDom(items) {
+    const sequences = {};
+    items.forEach((item) => {
+      item.querySelectorAll('[data-hero-text]').forEach((textEl) => {
+        const key = textEl.getAttribute('data-hero-text');
+        if (!key) return;
+        const value = textEl.textContent?.trim();
+        if (!value) return;
+        if (!sequences[key]) sequences[key] = [];
+        sequences[key].push(value);
+      });
+    });
+    return sequences;
+  }
+
+  function collectTextSequencesFromSlides(slides) {
+    const sequences = {};
+    slides.forEach((slide) => {
+      Object.keys(slide).forEach((key) => {
+        if (['type', 'src'].includes(key)) return;
+        const value = slide[key];
+        if (!value) return;
+        if (!sequences[key]) sequences[key] = [];
+        sequences[key].push(value);
+      });
+    });
+    return sequences;
+  }
+
   const listRoot = root.querySelector('[data-hero-distortion-image-list]');
+  const itemElements = listRoot
+    ? Array.from(listRoot.querySelectorAll('[data-hero-distortion-source]'))
+    : [];
+
   let cmsSlidesConfig = [];
 
-  if (listRoot) {
-    const itemElements = Array.from(
-      listRoot.querySelectorAll('[data-hero-distortion-source]')
-    );
-
+  if (itemElements.length) {
     cmsSlidesConfig = itemElements
       .map((item) => {
         const videoEl = item.querySelector('[data-hero-distortion-video-source]');
@@ -60,91 +89,40 @@ async function initHeroDistortion() {
         const videoSrc = extractVideoSrc(videoEl);
         const imageSrc = extractImageSrc(imageEl);
 
-        // Extract all text fields using data-hero-text="key" pattern
-        // All data must be within the [data-hero-distortion-source] wrapper
         const textData = {};
-        
-        // Check item itself for data-hero-text attribute (value in text content)
-        const itemTextKey = item.getAttribute('data-hero-text');
-        if (itemTextKey) {
-          textData[itemTextKey] = item.textContent?.trim() || '';
-        }
-        
-        // Also check item itself for data-hero-text-* attributes (value in attribute)
-        // e.g., data-hero-text-year="2024"
-        Array.from(item.attributes).forEach(attr => {
-          if (attr.name.startsWith('data-hero-text-')) {
-            const key = attr.name.replace('data-hero-text-', '');
-            if (attr.value) {
-              textData[key] = attr.value;
-            }
-          }
-        });
-        
-        // Scan elements inside the source div (all data must be within the source wrapper)
-        const foundTextElements = [];
-        item.querySelectorAll('[data-hero-text]').forEach(el => {
-          const key = el.getAttribute('data-hero-text');
-          if (key) {
-            const textContent = el.textContent || '';
-            const innerText = el.innerText || '';
-            const trimmed = textContent.trim();
-            
-            foundTextElements.push({
-              key,
-              textContent: textContent.substring(0, 50), // First 50 chars for debugging
-              innerText: innerText.substring(0, 50),
-              trimmed,
-              hasContent: !!trimmed
-            });
-            
-            // Use text content as the value (these are hidden data source elements)
-            if (trimmed) {
-              textData[key] = trimmed;
-            }
-          }
-        });
-
-        const slideData = {
-          ...textData
-        };
-
-        // Log all extracted data for debugging
-        console.log('Extracted slide data:', {
-          hasVideo: !!videoSrc,
-          hasImage: !!imageSrc,
-          foundTextElements: foundTextElements,
-          textFields: slideData,
-          textFieldCount: Object.keys(slideData).length,
-          itemHTML: item.outerHTML.substring(0, 200) // First 200 chars of HTML
+        item.querySelectorAll('[data-hero-text]').forEach((textEl) => {
+          const key = textEl.getAttribute('data-hero-text');
+          const value = textEl.textContent?.trim();
+          if (!key || !value) return;
+          textData[key] = value;
         });
 
         if (videoSrc) {
-          return { type: 'video', src: videoSrc, ...slideData };
+          return { type: 'video', src: videoSrc, ...textData };
         }
         if (imageSrc) {
-          return { type: inferSlideType(imageSrc), src: imageSrc, ...slideData };
+          return { type: inferSlideType(imageSrc), src: imageSrc, ...textData };
         }
         return null;
       })
       .filter(Boolean);
+  }
 
-    // Legacy fallback: allow direct image elements without wrapper
-    if (!cmsSlidesConfig.length) {
-      const legacyImageEls = Array.from(
-        listRoot.querySelectorAll('[data-hero-distortion-image-source]')
-      );
-      cmsSlidesConfig = legacyImageEls
-        .map((el) => {
-          const src = extractImageSrc(el);
-          if (!src) return null;
-          return {
-            type: inferSlideType(src),
-            src,
-          };
-        })
-        .filter(Boolean);
-    }
+  // Legacy fallback: allow direct image elements without wrapper
+  if (!cmsSlidesConfig.length && listRoot) {
+    const legacyImageEls = Array.from(
+      listRoot.querySelectorAll('[data-hero-distortion-image-source]')
+    );
+    cmsSlidesConfig = legacyImageEls
+      .map((el) => {
+        const src = extractImageSrc(el);
+        if (!src) return null;
+        return {
+          type: inferSlideType(src),
+          src,
+        };
+      })
+      .filter(Boolean);
   }
 
   const fallbackSlidesConfig = [
@@ -156,6 +134,10 @@ async function initHeroDistortion() {
   ];
 
   const slidesConfig = cmsSlidesConfig.length ? cmsSlidesConfig : fallbackSlidesConfig;
+
+  const textSequencesByKey = itemElements.length
+    ? collectTextSequencesFromDom(itemElements)
+    : collectTextSequencesFromSlides(slidesConfig);
 
   async function loadSlideTexture(slide) {
     if (slide.type === 'video') {
@@ -224,6 +206,12 @@ async function initHeroDistortion() {
   // Find all target elements with data-hero-text-target="key" (these are the display elements)
   // Title, description, and all other text fields use this same system
   const customTextElements = {};
+  const textWordRegistry = {};
+  let useSplitTextAnimations = false;
+  const canUseSplitText =
+    typeof gsap !== 'undefined' &&
+    typeof SplitText !== 'undefined' &&
+    Object.keys(textSequencesByKey).length > 0;
   
   function findTargetElements(container) {
     container.querySelectorAll('[data-hero-text-target]').forEach(el => {
@@ -243,15 +231,92 @@ async function initHeroDistortion() {
   // Then scan document-wide for any targets we missed
   findTargetElements(document);
 
-  // Function to update text content with fade transition
+  if (canUseSplitText) {
+    buildTextWordRegistry();
+    if (Object.keys(textWordRegistry).length) {
+      setupSplitTextWords();
+      useSplitTextAnimations = true;
+    }
+  }
+
+  function buildTextWordRegistry() {
+    Object.keys(customTextElements).forEach((key) => {
+      const wrapper = customTextElements[key];
+      const words = textSequencesByKey[key];
+      if (!wrapper || !words || !words.length) return;
+
+      // collect classes (excluding data/hero-text-specific ones) from existing children
+      const inheritedClasses = Array.from(wrapper.children).reduce((acc, child) => {
+        child.classList.forEach((cls) => {
+          if (!acc.includes(cls) && !cls.startsWith('hero-text-wrapper')) {
+            acc.push(cls);
+          }
+        });
+        return acc;
+      }, []);
+
+      wrapper.innerHTML = '';
+
+      const nodes = words.map((word) => {
+        const node = document.createElement('div');
+        node.setAttribute('data-hero-text-word', '');
+        node.classList.add('hero-text-word');
+        inheritedClasses.forEach((cls) => node.classList.add(cls));
+        node.textContent = word;
+        wrapper.appendChild(node);
+        return node;
+      });
+
+      textWordRegistry[key] = {
+        wrapper,
+        wordNodes: nodes,
+        splits: [],
+        activeIndex: 0,
+      };
+    });
+  }
+
+  function setupSplitTextWords() {
+    Object.keys(textWordRegistry).forEach((key) => {
+      const registry = textWordRegistry[key];
+      registry.splits = registry.wordNodes.map((wordNode, index) => {
+        const split = new SplitText(wordNode, { type: 'chars' });
+        gsap.set(split.chars, { yPercent: index === 0 ? 0 : 100 });
+        return split;
+      });
+    });
+  }
+
+  function triggerSplitWordTransitions(fromIndex, toIndex) {
+    Object.keys(textWordRegistry).forEach((key) => {
+      const registry = textWordRegistry[key];
+      if (!registry || !registry.splits?.length) return;
+      const { splits, wrapper } = registry;
+      if (fromIndex >= splits.length || toIndex >= splits.length) return;
+      if (fromIndex === toIndex) return;
+
+      const duration =
+        parseFloat(wrapper.getAttribute('data-hero-text-duration')) || transitionDuration;
+      const stagger =
+        parseFloat(wrapper.getAttribute('data-hero-text-stagger')) || 0;
+      const ease = wrapper.getAttribute('data-hero-text-ease') || 'power1.inOut';
+
+      const currentSplit = splits[fromIndex];
+      const nextSplit = splits[toIndex];
+      gsap.timeline()
+        .set(nextSplit.chars, { yPercent: 100 }, 0)
+        .to(currentSplit.chars, { yPercent: -100, duration, stagger, ease }, 0)
+        .to(nextSplit.chars, { yPercent: 0, duration, stagger, ease }, 0);
+
+      registry.activeIndex = toIndex;
+    });
+  }
+
+  // Function to update text content with fade transition (fallback when GSAP/SplitText unavailable)
   function updateTextContent(newSlideIndex, transitionProgress = 1) {
     const newSlide = slidesConfig[newSlideIndex];
     if (!newSlide) return;
 
-    // Always update text content immediately (for smooth crossfade effect)
-    // Fade opacity based on transition progress
-    // Updates all text fields (title, description, and any custom fields) using the same system
-    
     Object.keys(customTextElements).forEach(key => {
       if (newSlide[key] !== undefined) {
         const el = customTextElements[key];
@@ -263,8 +328,9 @@ async function initHeroDistortion() {
     });
   }
 
-  // Initialize text for first slide
-  updateTextContent(0, 1);
+  if (!useSplitTextAnimations) {
+    updateTextContent(0, 1);
+  }
 
   let elapsed = 0;
   let transitionTime = 0;
@@ -280,6 +346,9 @@ async function initHeroDistortion() {
     inTransition = true;
     resetIntervalTimer();
     transitionTime = 0;
+    if (useSplitTextAnimations) {
+      triggerSplitWordTransitions(currentIndex, nextIndex);
+    }
   }
 
   app.ticker.add((ticker) => {
@@ -324,8 +393,9 @@ async function initHeroDistortion() {
     currentSlide.alpha = 1 - easeInOut;
     nextSlide.alpha = easeInOut;
 
-    // Update text content during transition (fade from old to new)
-    updateTextContent(nextIndex, easeInOut);
+    if (!useSplitTextAnimations) {
+      updateTextContent(nextIndex, easeInOut);
+    }
 
     if (t >= 1) {
       currentSlide.alpha = 0;
@@ -339,8 +409,9 @@ async function initHeroDistortion() {
       nextIndex = (currentIndex + 1) % slides.length;
       inTransition = false;
       
-      // Finalize text content after transition completes
-      updateTextContent(currentIndex, 1);
+      if (!useSplitTextAnimations) {
+        updateTextContent(currentIndex, 1);
+      }
     }
   });
 
