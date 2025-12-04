@@ -304,6 +304,8 @@ async function initHeroDistortion() {
     
     // Update link block for the new slide (once, after all text transitions are triggered)
     updateLinkBlock(toIndex);
+    // Update cursor text to match the new slide
+    updateCursorText(toIndex);
   };
 
   const updateTextContent = (newSlideIndex, progress = 1) => {
@@ -361,6 +363,17 @@ async function initHeroDistortion() {
     }
   };
 
+  // Update cursor paragraph text when slide changes
+  const updateCursorText = (slideIndex) => {
+    const cursorParagraph = document.querySelector('.cursor p');
+    if (!cursorParagraph) return;
+    
+    const slide = slidesConfig[slideIndex];
+    if (!slide || !slide.title) return;
+    
+    cursorParagraph.innerHTML = slide.title;
+  };
+
   // Setup click handler for div-based link blocks
   if (linkBlock) {
     // Make it keyboard accessible
@@ -402,6 +415,8 @@ async function initHeroDistortion() {
   
   // Initialize link block with first slide
   updateLinkBlock(0);
+  // Initialize cursor text with first slide
+  updateCursorText(0);
 
   // Transition state
   let currentIndex = 0, nextIndex = 1, elapsed = 0, transitionTime = 0, inTransition = false;
@@ -467,6 +482,8 @@ async function initHeroDistortion() {
       if (!useSplitTextAnimations) updateTextContent(currentIndex, 1);
       // Update link block with new slide
       updateLinkBlock(currentIndex);
+      // Update cursor text with new slide
+      updateCursorText(currentIndex);
     }
   });
 
