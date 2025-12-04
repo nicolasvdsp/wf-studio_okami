@@ -65,6 +65,27 @@ async function initHeroDistortion() {
   const slidesConfig = cmsSlidesConfig.length ? cmsSlidesConfig : fallbackSlidesConfig;
   const slideCount = slidesConfig.length;
 
+  // Log all collected slide data for debugging
+  /*console.group('🎬 Hero Distortion - Collected Slide Data');
+  console.log(`Total slides: ${slideCount}`);
+  slidesConfig.forEach((slide, index) => {
+    console.group(`Slide ${index + 1} (index: ${index})`);
+    console.log('Type:', slide.type);
+    console.log('Source:', slide.src);
+    // Log all text fields
+    const textFields = {};
+    Object.keys(slide).forEach((key) => {
+      if (!['type', 'src'].includes(key)) {
+        textFields[key] = slide[key];
+      }
+    });
+    console.log('Text Fields:', textFields);
+    console.log('Full Object:', slide);
+    console.groupEnd();
+  });
+  console.log('All Slides Array:', slidesConfig);
+  console.groupEnd();*/
+
   // Collect text sequences
   const collectTextSequences = (items) => {
     const sequences = {};
@@ -273,11 +294,24 @@ async function initHeroDistortion() {
 
   const updateTextContent = (newSlideIndex, progress = 1) => {
     const slide = slidesConfig[newSlideIndex];
-    if (!slide) return;
+    if (!slide) {
+      console.warn('⚠️ No slide found at index:', newSlideIndex);
+      return;
+    }
+    
+    // Log what text is being updated
+    console.log('📝 Updating text content:', {
+      slideIndex: newSlideIndex,
+      progress,
+      slideData: slide,
+      textFields: Object.keys(slide).filter(k => !['type', 'src'].includes(k))
+    });
+    
     Object.keys(customTextElements).forEach((key) => {
       if (slide[key] !== undefined) {
         const el = customTextElements[key];
         if (el) {
+          console.log(`  → ${key}: "${slide[key]}"`);
           el.textContent = slide[key];
           el.style.opacity = progress;
         }
@@ -315,6 +349,16 @@ async function initHeroDistortion() {
     nextIndex = (currentIndex + step + slides.length) % slides.length;
     inTransition = true;
     elapsed = transitionTime = 0;
+    
+    // Log transition details
+    /*console.log('🔄 Transition:', {
+      from: currentIndex,
+      to: nextIndex,
+      step,
+      currentSlide: slidesConfig[currentIndex],
+      nextSlide: slidesConfig[nextIndex]
+    });*/
+    
     if (useSplitTextAnimations) {
       triggerSplitWordTransitions(currentIndex, nextIndex, step === 0 ? 1 : Math.sign(step));
     }
