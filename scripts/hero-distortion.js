@@ -47,6 +47,14 @@ async function initHeroDistortion() {
         if (value) textData[key] = value;
       });
       
+      // Extract link href from .hero-distortion_link[data-hero-distortion-link] (should be <a> tag)
+      const linkEl = item.querySelector('.hero-distortion_link[data-hero-distortion-link]') || 
+                     item.querySelector('[data-hero-distortion-link]');
+      const linkHref = linkEl?.getAttribute('href') || linkEl?.href || '';
+      if (linkHref) {
+        textData.link = linkHref;
+      }
+      
       if (!textData.pagination) textData.pagination = String(idx + 1);
       if (videoSrc) return { type: 'video', src: videoSrc, ...textData };
       if (imageSrc) return { type: inferSlideType(imageSrc), src: imageSrc, ...textData };
@@ -180,6 +188,9 @@ async function initHeroDistortion() {
     });
   });
 
+  // Find link block element (div that needs to be updated)
+  const linkBlock = document.querySelector('.hero-distortion_link-block[data-cursor]');
+
   // Helper to find pagination siblings
   const findPaginationSibling = (wrapper, className, attrName) => {
     const parent = wrapper.parentElement;
@@ -290,6 +301,9 @@ async function initHeroDistortion() {
       registry.activeIndex = toIndex;
       if (key === 'pagination') updatePaginationNumbers(toIndex);
     });
+    
+    // Update link block for the new slide (once, after all text transitions are triggered)
+    updateLinkBlock(toIndex);
   };
 
   const updateTextContent = (newSlideIndex, progress = 1) => {
@@ -328,6 +342,51 @@ async function initHeroDistortion() {
     }
   };
 
+  // Update link block data-href and data-cursor attribute
+  const updateLinkBlock = (slideIndex) => {
+    const linkElement = document.querySelector('.hero-distortion_link-block[data-cursor]');
+    if (!linkElement) return;
+    
+    const slide = slidesConfig[slideIndex];
+    if (!slide) return;
+    
+    // Update data-href with link
+    if (slide.link) {
+      linkElement.setAttribute('data-href', slide.link);
+    }
+    
+    // Update data-cursor with title if it exists
+    if (slide.title) {
+      linkElement.setAttribute('data-cursor', slide.title);
+    }
+  };
+
+  // Setup click handler for div-based link blocks
+  if (linkBlock) {
+    // Make it keyboard accessible
+    linkBlock.setAttribute('role', 'button');
+    linkBlock.setAttribute('tabindex', '0');
+    
+    // Click handler
+    linkBlock.addEventListener('click', (e) => {
+      const href = linkBlock.getAttribute('data-href');
+      if (href) {
+        window.location.href = href;
+      }
+    });
+    
+    // Keyboard handler (Enter and Space)
+    linkBlock.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const href = linkBlock.getAttribute('data-href');
+        if (href) {
+          window.location.href = href;
+        }
+      }
+    });
+  }
+
   // Initialize text system
   let useSplitTextAnimations = false;
   if (canUseSplitText) {
@@ -340,6 +399,9 @@ async function initHeroDistortion() {
     }
   }
   if (!useSplitTextAnimations) updateTextContent(0, 1);
+  
+  // Initialize link block with first slide
+  updateLinkBlock(0);
 
   // Transition state
   let currentIndex = 0, nextIndex = 1, elapsed = 0, transitionTime = 0, inTransition = false;
@@ -403,6 +465,8 @@ async function initHeroDistortion() {
       nextIndex = (currentIndex + 1) % slides.length;
       inTransition = false;
       if (!useSplitTextAnimations) updateTextContent(currentIndex, 1);
+      // Update link block with new slide
+      updateLinkBlock(currentIndex);
     }
   });
 
