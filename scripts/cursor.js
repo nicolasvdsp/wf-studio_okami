@@ -1,4 +1,17 @@
-function initDynamicCustomTextCursor() {  
+// Check if device is a touch device
+function isTouchDevice() {
+  return 'ontouchstart' in window || 
+         navigator.maxTouchPoints > 0 || 
+         (navigator.msMaxTouchPoints && navigator.msMaxTouchPoints > 0) ||
+         matchMedia('(pointer: coarse)').matches;
+}
+
+function initDynamicCustomTextCursor() {
+    // Only initialize on pointer devices, not touch devices
+    if (isTouchDevice()) {
+      return;
+    }
+    
     let cursorItem = document.querySelector(".cursor");
     let cursorParagraph = cursorItem.querySelector("p");
     let targets = document.querySelectorAll("[data-cursor]");
