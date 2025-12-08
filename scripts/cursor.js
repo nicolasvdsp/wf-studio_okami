@@ -27,23 +27,51 @@ function initDynamicCustomTextCursor() {
       let scrollY = window.scrollY;
       let cursorX = e.clientX;
       let cursorY = e.clientY + scrollY; // Adjust cursorY to account for scroll
-  
+
       // Default offsets
       let xPercent = xOffset;
       let yPercent = yOffset;
-  
+
       // Adjust X offset dynamically based on cursor width
       let cursorEdgeThreshold = getCursorEdgeThreshold();
-      if (cursorX > windowWidth - cursorEdgeThreshold) {
-        cursorIsOnRight = true;
-        xPercent = -100;
+      
+      // Check if current target has data-cursor-this-edge attribute
+      let useElementBounds = currentTarget && currentTarget.hasAttribute("data-cursor-this-edge");
+      
+      if (useElementBounds) {
+        // Use element boundaries for edge detection
+        let elementRect = currentTarget.getBoundingClientRect();
+        let elementRight = elementRect.right;
+        let elementBottom = elementRect.bottom + scrollY;
+        let elementLeft = elementRect.left;
+        let elementTop = elementRect.top + scrollY;
+        
+        // Check if cursor is near the right edge of the element
+        if (cursorX > elementRight - cursorEdgeThreshold) {
+          cursorIsOnRight = true;
+          xPercent = -100;
+        } else {
+          cursorIsOnRight = false;
+        }
+        
+        // Check if cursor is near the bottom edge of the element (bottom 10%)
+        let elementHeight = elementRect.height;
+        if (cursorY > elementBottom - elementHeight * 0.1) {
+          yPercent = -120;
+        }
       } else {
-        cursorIsOnRight = false;
-      }
-  
-      // Adjust Y offset if in the bottom 10% of the current viewport
-      if (cursorY > scrollY + windowHeight * 0.9) {
-        yPercent = -120;
+        // Use window boundaries for edge detection (original behavior)
+        if (cursorX > windowWidth - cursorEdgeThreshold) {
+          cursorIsOnRight = true;
+          xPercent = -100;
+        } else {
+          cursorIsOnRight = false;
+        }
+
+        // Adjust Y offset if in the bottom 10% of the current viewport
+        if (cursorY > scrollY + windowHeight * 0.9) {
+          yPercent = -120;
+        }
       }
   
       if (currentTarget) {
@@ -66,17 +94,23 @@ function initDynamicCustomTextCursor() {
     targets.forEach(target => {
       target.addEventListener("mouseenter", () => {
         currentTarget = target; // Set the current target
-  
+
         let newText = target.getAttribute("data-cursor");
-  
+
         // Update only if the text changes
         if (newText !== lastText) {
           cursorParagraph.innerHTML = newText;
           lastText = newText;
-  
+
           // Recalculate edge awareness whenever the text changes
           let cursorEdgeThreshold = getCursorEdgeThreshold();
         }
+      });
+      
+      target.addEventListener("mouseleave", () => {
+        currentTarget = null; // Clear the current target when mouse leaves
+        cursorParagraph.innerHTML = ''; // Clear the cursor text
+        lastText = '';
       });
     });
   }
