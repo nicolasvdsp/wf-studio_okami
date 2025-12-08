@@ -89,6 +89,73 @@ function initPreviewFollower() {
     });
   }
   
+  function initGalleryViewSwitcher() {
+    const buttons = document.querySelectorAll('[data-gallery-button]');
+    const gridElement = document.querySelector('[data-gallery-element="grid"]');
+    const listElement = document.querySelector('[data-gallery-element="list"]');
+
+    if (!buttons.length || !gridElement || !listElement) return;
+
+    // Function to force grid view on mobile
+    function forceGridView() {
+      if (window.innerWidth <= 991) {
+        gridElement.style.display = 'block';
+        listElement.style.display = 'none';
+        
+        // Update button active states to grid
+        buttons.forEach(btn => {
+          const btnType = btn.getAttribute('data-gallery-button');
+          if (btnType === 'grid') {
+            btn.setAttribute('data-gallery-active', 'true');
+          } else {
+            btn.setAttribute('data-gallery-active', 'false');
+          }
+        });
+        return true; // Indicates grid was forced
+      }
+      return false; // Indicates normal behavior allowed
+    }
+
+    // Check on load and resize
+    forceGridView();
+    window.addEventListener('resize', forceGridView);
+
+    buttons.forEach(button => {
+      button.addEventListener('click', () => {
+        // Force grid view on mobile, ignore click
+        if (window.innerWidth <= 991) {
+          forceGridView();
+          return;
+        }
+
+        const viewType = button.getAttribute('data-gallery-button');
+        
+        // Update button active states
+        buttons.forEach(btn => {
+          const btnType = btn.getAttribute('data-gallery-button');
+          if (btnType === viewType) {
+            btn.setAttribute('data-gallery-active', 'true');
+          } else {
+            btn.setAttribute('data-gallery-active', 'false');
+          }
+        });
+
+        // Show/hide gallery elements
+        if (viewType === 'grid') {
+          gridElement.style.display = 'block';
+          listElement.style.display = 'none';
+        } else if (viewType === 'list') {
+          gridElement.style.display = 'none';
+          listElement.style.display = 'block';
+        }
+      });
+    });
+  }
+
   // Initialize Image Preview Cursor Follower
   document.addEventListener('contentload', initPreviewFollower);
   initPreviewFollower();
+
+  // Initialize Gallery View Switcher
+  document.addEventListener('contentload', initGalleryViewSwitcher);
+  initGalleryViewSwitcher();
