@@ -2,6 +2,9 @@ async function initHeroDistortion() {
   const root = document.querySelector('[data-hero-distortion-init]');
   if (!root) return;
 
+  // Clear background image placeholder (only needed for Webflow designer preview)
+  root.style.backgroundImage = 'none';
+
   // Config
   const isAutoplayEnabled = root.getAttribute('data-hero-distortion-autoplay') !== 'false';
   const switchInterval = parseFloat(root.getAttribute('data-hero-distortion-interval')) || 6;
