@@ -8,11 +8,12 @@ function isTouchDevice() {
 
 function initDynamicCustomTextCursor() {
     // Only initialize on pointer devices, not touch devices
+    let cursorItem = document.querySelector(".cursor");
     if (isTouchDevice()) {
+      cursorItem.style.display = "none";
       return;
     }
     
-    let cursorItem = document.querySelector(".cursor");
     let cursorParagraph = cursorItem.querySelector("p");
     let targets = document.querySelectorAll("[data-cursor]");
     let xOffset = 10;
