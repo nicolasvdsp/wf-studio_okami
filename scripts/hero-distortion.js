@@ -7,9 +7,9 @@ async function initHeroDistortion() {
 
   // Config
   const isAutoplayEnabled = root.getAttribute('data-hero-distortion-autoplay') !== 'false';
-  const switchInterval = parseFloat(root.getAttribute('data-hero-distortion-interval')) || 6;
-  const transitionDuration = 0.55;
-  const maxStrength = 40;
+  const switchInterval = parseFloat(root.getAttribute('data-hero-distortion-interval')) || 5;
+  const transitionDuration = parseFloat(root.getAttribute('data-hero-distortion-duration')) || 0.45;
+  const maxStrength = parseFloat(root.getAttribute('data-hero-distortion-strength')) || 40;
   const scrollDebounceMs = parseFloat(root.getAttribute('data-hero-scroll-debounce')) || Math.max(transitionDuration * 2000 + 250, 900);
 
   // PIXI setup
