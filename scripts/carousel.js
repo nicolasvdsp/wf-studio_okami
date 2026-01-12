@@ -110,6 +110,21 @@ async function initCarousel() {
     return;
   }
 
+  // Create slides wrapper container with fixed dimensions to prevent iOS Safari zoom issues
+  const slidesWrapper = document.createElement('div');
+  slidesWrapper.className = 'carousel-slides-wrapper';
+  slidesWrapper.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  `;
+  componentContainer.appendChild(slidesWrapper);
+
   // Create slide elements
   const slides = [];
   const slideElements = [];
@@ -148,7 +163,7 @@ async function initCarousel() {
       slideEl.appendChild(img);
     }
 
-    componentContainer.appendChild(slideEl);
+    slidesWrapper.appendChild(slideEl);
     slideElements.push(slideEl);
     slides.push({ element: slideEl, config: slide });
   }
