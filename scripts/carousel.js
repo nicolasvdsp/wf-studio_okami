@@ -118,15 +118,18 @@ async function initCarousel() {
     const slide = slidesConfig[i];
     const slideEl = document.createElement('div');
     slideEl.className = 'carousel-slide';
-    slideEl.style.cssText = `
+      slideEl.style.cssText = `
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
       opacity: ${i === 0 ? 1 : 0};
-      transition: opacity ${transitionDuration}s ease-in-out;
+      transition: opacity ${transitionDuration}s linear;
       pointer-events: ${i === 0 ? 'auto' : 'none'};
+      will-change: opacity;
+      transform: translateZ(0);
+      backface-visibility: hidden;
     `;
 
     if (slide.type === 'video') {
@@ -136,12 +139,12 @@ async function initCarousel() {
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
-      video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+      video.style.cssText = 'width: 100%; height: 100%; object-fit: cover; transform: translateZ(0); backface-visibility: hidden;';
       slideEl.appendChild(video);
     } else {
       const img = document.createElement('img');
       img.src = slide.src;
-      img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+      img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; transform: translateZ(0); backface-visibility: hidden;';
       slideEl.appendChild(img);
     }
 
@@ -494,8 +497,30 @@ async function initCarousel() {
   }, { passive: true });
   window.addEventListener('touchend', () => { lastTouchY = null; });
 
+  // Prevent layout shifts during viewport changes (e.g., iOS Safari menu)
+  let resizeTimeout;
+  let isResizing = false;
+  
   window.addEventListener('resize', () => {
-    // Handle resize if needed (images/videos should handle this via CSS)
+    // Don't interfere with active transitions
+    if (inTransition) return;
+    
+    if (!isResizing) {
+      isResizing = true;
+      // Temporarily disable transitions during resize to prevent jerky movements
+      slideElements.forEach((el) => {
+        el.style.transition = 'none';
+      });
+    }
+    
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      isResizing = false;
+      // Re-enable transitions after resize settles
+      slideElements.forEach((el) => {
+        el.style.transition = `opacity ${transitionDuration}s linear`;
+      });
+    }, 150);
   });
 }
 
