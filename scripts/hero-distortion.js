@@ -1,9 +1,5 @@
 async function initHeroDistortion() {
-  // Register GSAP PixiPlugin if available
-  if (typeof gsap !== 'undefined' && typeof PixiPlugin !== 'undefined') {
-    gsap.registerPlugin(PixiPlugin);
-  }
-  
+  console.log("haha");
   const root = document.querySelector('[data-hero-distortion-init]');
   if (!root) return;
 
@@ -16,12 +12,6 @@ async function initHeroDistortion() {
   const transitionDuration = parseFloat(root.getAttribute('data-hero-distortion-duration')) || 0.45;
   const maxStrength = parseFloat(root.getAttribute('data-hero-distortion-strength')) || 40;
   const scrollDebounceMs = parseFloat(root.getAttribute('data-hero-scroll-debounce')) || Math.max(transitionDuration * 2000 + 250, 900);
-  
-  // Preloader config
-  const preloaderEnabled = root.getAttribute('data-hero-preloader') !== 'false';
-  const preloaderDuration = parseFloat(root.getAttribute('data-hero-preloader-duration')) || 1.4; // seconds per image
-  const preloaderOverlap = parseFloat(root.getAttribute('data-hero-preloader-overlap')) || 0.3; // overlap in seconds (how much they overlap)
-  const preloaderStorageKey = 'hero-distortion-preloader-shown';
 
   // PIXI setup
   const app = new PIXI.Application();
@@ -154,28 +144,21 @@ async function initHeroDistortion() {
   const fitSpriteToScreen = (sprite) => {
     const tex = sprite.texture;
     if (!tex?.width || !tex?.height) return;
-    // Use Math.max for "cover" behavior - image fills screen
     const scale = Math.max(app.screen.width / tex.width, app.screen.height / tex.height);
     sprite.width = tex.width * scale;
     sprite.height = tex.height * scale;
     sprite.anchor.set(0.5);
     sprite.position.set(app.screen.width / 2, app.screen.height / 2);
-    // Store the scale that was applied (for preloader animations)
-    sprite.baseScale = scale;
   };
 
   const slides = slideTextures.map((tex) => {
     const sprite = new PIXI.Sprite(tex);
     fitSpriteToScreen(sprite);
-    // Store original fitted dimensions to preserve them during preloader and after
-    sprite.originalFittedWidth = sprite.width;
-    sprite.originalFittedHeight = sprite.height;
     return sprite;
   });
 
-  // Initialize all slides as hidden (preloader will show them)
   slides.forEach((sprite, i) => {
-    sprite.alpha = 0;
+    sprite.alpha = i === 0 ? 1 : 0;
     app.stage.addChild(sprite);
   });
 
@@ -432,261 +415,17 @@ async function initHeroDistortion() {
       useSplitTextAnimations = true;
     }
   }
+  if (!useSplitTextAnimations) updateTextContent(0, 1);
+  
+  // Initialize link block with first slide
+  updateLinkBlock(0);
+  // Initialize cursor text with first slide
+  updateCursorText(0);
 
   // Transition state
   let currentIndex = 0, nextIndex = 1, elapsed = 0, transitionTime = 0, inTransition = false;
-  let preloaderActive = false;
-  let preloaderComplete = false;
-
-  // Preloader function
-  const runPreloader = () => {
-    // Check if preloader should run
-    if (!preloaderEnabled) {
-      // Skip preloader, start with first slide
-      currentIndex = 0;
-      slides[0].alpha = 1;
-      if (!useSplitTextAnimations) updateTextContent(0, 1);
-      updateLinkBlock(0);
-      updateCursorText(0);
-      preloaderComplete = true;
-      return;
-    }
-
-    // Check sessionStorage
-    const hasSeenPreloader = sessionStorage.getItem(preloaderStorageKey) === 'true';
-    if (hasSeenPreloader) {
-      // Skip preloader, start with first slide (index 0)
-      currentIndex = 0;
-      slides[currentIndex].alpha = 1;
-      slides[currentIndex].scale.set(1, 1);
-      slides[currentIndex].position.y = app.screen.height / 2;
-      // Hide other slides
-      slides.forEach((sprite, index) => {
-        if (index !== 0) {
-          sprite.alpha = 0;
-        }
-      });
-      if (!useSplitTextAnimations) updateTextContent(currentIndex, 1);
-      updateLinkBlock(currentIndex);
-      updateCursorText(currentIndex);
-      preloaderComplete = true;
-      return;
-    }
-
-    // Run preloader sequence with GSAP timeline
-    preloaderActive = true;
-    
-    // Check if GSAP is available
-    if (typeof gsap === 'undefined') {
-      console.warn('GSAP is required for preloader animations');
-      // Fallback to simple preloader
-      let preloaderIndex = 0;
-      const showNextSlide = () => {
-        slides.forEach(sprite => sprite.alpha = 0);
-        slides[preloaderIndex].alpha = 1;
-        if (!useSplitTextAnimations) updateTextContent(preloaderIndex, 1);
-        updateLinkBlock(preloaderIndex);
-        updateCursorText(preloaderIndex);
-        preloaderIndex++;
-        if (preloaderIndex < slideCount) {
-          setTimeout(showNextSlide, preloaderDuration * 1000);
-        } else {
-          currentIndex = slideCount - 1;
-          slides[currentIndex].alpha = 1;
-          if (!useSplitTextAnimations) updateTextContent(currentIndex, 1);
-          updateLinkBlock(currentIndex);
-          updateCursorText(currentIndex);
-          sessionStorage.setItem(preloaderStorageKey, 'true');
-          preloaderActive = false;
-          preloaderComplete = true;
-        }
-      };
-      showNextSlide();
-      return;
-    }
-
-    // Create GSAP timeline for preloader
-    const preloaderTimeline = gsap.timeline({
-      onComplete: () => {
-        // Preloader complete - end on last slide (index 4, slide 5) so distortion can continue
-        const finalIndex = slideCount - 1; // Last slide (slide 5)
-        currentIndex = finalIndex;
-        nextIndex = 0; // Next transition will go to slide 1
-        
-        // Reset all slides to proper state for transitions
-        // The last slide (slide 5) stays visible, others are reset for smooth transitions
-        slides.forEach((sprite, index) => {
-          // Reset sprite completely - clear any animation state
-          sprite.scale.set(1, 1);
-          sprite.anchor.set(0.5);
-          
-          // Re-fit sprite to screen to ensure correct sizing
-          // This recalculates based on texture and screen size
-          const tex = sprite.texture;
-          if (tex?.width && tex?.height) {
-            const scale = Math.max(app.screen.width / tex.width, app.screen.height / tex.height);
-            sprite.width = tex.width * scale;
-            sprite.height = tex.height * scale;
-          }
-          
-          sprite.position.set(app.screen.width / 2, app.screen.height / 2);
-          sprite.filters = null;
-          
-          if (index === finalIndex) {
-            // Last slide (slide 5) is visible - this is where we ended
-            sprite.alpha = 1;
-          } else {
-            // All other slides are hidden and reset for smooth transitions
-            sprite.alpha = 0;
-          }
-        });
-        
-        if (useSplitTextAnimations) {
-          Object.keys(textWordRegistry).forEach((key) => {
-            const registry = textWordRegistry[key];
-            if (registry && registry.wordNodes) {
-              registry.wordNodes.forEach((node, i) => {
-                node.classList.toggle('is-active', i === currentIndex);
-              });
-              registry.activeIndex = currentIndex;
-            }
-          });
-          if (textWordRegistry['pagination']) updatePaginationNumbers(currentIndex);
-        } else {
-          updateTextContent(currentIndex, 1);
-        }
-        updateLinkBlock(currentIndex);
-        updateCursorText(currentIndex);
-        
-        // Store in sessionStorage
-        sessionStorage.setItem(preloaderStorageKey, 'true');
-        
-        // Mark preloader as complete
-        preloaderActive = false;
-        preloaderComplete = true;
-      }
-    });
-
-    // Ensure all sprites are at correct size before preloader
-    const centerX = app.screen.width / 2;
-    const centerY = app.screen.height / 2;
-    const startY = centerY + (app.screen.height * 1.01); // yPercent 101
-    
-    // Prepare sprites for animation - start at 0 width/height
-    slides.forEach((sprite, index) => {
-      // Use the original fitted dimensions that were stored when sprites were first created
-      // Don't overwrite them - they should already be stored from line 171-172
-      
-      // Set initial size to 0 and position below screen
-      sprite.width = 0;
-      sprite.height = 0;
-      sprite.scale.set(1, 1);
-      sprite.alpha = 0;
-      sprite.position.set(centerX, startY);
-    });
-    
-    // Show each slide one by one with fade and scale animation
-    // Start from index 0 (slide 1) and go through all slides in order, ending at index 4 (slide 5)
-    for (let i = 0; i < slideCount; i++) {
-      const slideIndex = i;
-      // Calculate start time with slight overlap
-      const startTime = i * (preloaderDuration - preloaderOverlap);
-      const sprite = slides[slideIndex];
-      
-      // Animate sprite from width/height 0 to original, moving from yPercent 101 to center
-      // Use PixiPlugin if available, otherwise fallback to manual animation
-      if (typeof PixiPlugin !== 'undefined' && gsap && gsap.plugins && gsap.plugins.PixiPlugin) {
-        // Use PixiPlugin for direct PIXI property animation
-        preloaderTimeline
-          .set(sprite, { 
-            pixi: { alpha: 1, width: 0, height: 0, y: startY }
-          }, startTime)
-          .to(sprite, {
-            pixi: { 
-              width: sprite.originalFittedWidth, 
-              height: sprite.originalFittedHeight,
-              y: centerY
-            },
-            duration: preloaderDuration,
-            ease: 'power2.out'
-          }, startTime)
-          // Update text content when slide animation starts
-          .call(() => {
-            if (useSplitTextAnimations) {
-              Object.keys(textWordRegistry).forEach((key) => {
-                const registry = textWordRegistry[key];
-                if (registry && registry.wordNodes) {
-                  registry.wordNodes.forEach((node, idx) => {
-                    node.classList.toggle('is-active', idx === slideIndex);
-                  });
-                  registry.activeIndex = slideIndex;
-                }
-              });
-              if (textWordRegistry['pagination']) updatePaginationNumbers(slideIndex);
-            } else {
-              updateTextContent(slideIndex, 1);
-            }
-            updateLinkBlock(slideIndex);
-            updateCursorText(slideIndex);
-          }, null, startTime);
-      } else {
-        // Fallback: use custom properties with onUpdate
-        sprite.preloaderWidth = 0;
-        sprite.preloaderHeight = 0;
-        sprite.preloaderY = startY;
-        preloaderTimeline
-          .set(sprite, { 
-            alpha: 1,
-            preloaderWidth: 0,
-            preloaderHeight: 0,
-            preloaderY: startY
-          }, startTime)
-          .to(sprite, {
-            preloaderWidth: sprite.originalFittedWidth,
-            preloaderHeight: sprite.originalFittedHeight,
-            preloaderY: centerY,
-            duration: preloaderDuration,
-            ease: 'power2.out',
-            onUpdate: function() {
-              sprite.width = sprite.preloaderWidth;
-              sprite.height = sprite.preloaderHeight;
-              sprite.position.y = sprite.preloaderY;
-            }
-          }, startTime)
-          // Move this slide to the top when it starts (so it appears above previous ones)
-          .call(() => {
-            // Move to top of stage (highest z-index)
-            app.stage.setChildIndex(sprite, app.stage.children.length - 1);
-          }, null, startTime)
-          // Update text content when slide animation starts
-          .call(() => {
-            if (useSplitTextAnimations) {
-              Object.keys(textWordRegistry).forEach((key) => {
-                const registry = textWordRegistry[key];
-                if (registry && registry.wordNodes) {
-                  registry.wordNodes.forEach((node, idx) => {
-                    node.classList.toggle('is-active', idx === slideIndex);
-                  });
-                  registry.activeIndex = slideIndex;
-                }
-              });
-              if (textWordRegistry['pagination']) updatePaginationNumbers(slideIndex);
-            } else {
-              updateTextContent(slideIndex, 1);
-            }
-            updateLinkBlock(slideIndex);
-            updateCursorText(slideIndex);
-          }, null, startTime);
-      }
-    }
-  };
-
-  // Initialize: run preloader or start normally
-  runPreloader();
 
   const beginTransition = (step = 1) => {
-    // Don't allow transitions during preloader
-    if (preloaderActive || !preloaderComplete) return;
     if (inTransition) return;
     nextIndex = (currentIndex + step + slides.length) % slides.length;
     inTransition = true;
@@ -710,11 +449,6 @@ async function initHeroDistortion() {
   app.ticker.add((ticker) => {
     const dt = ticker.deltaMS / 1000;
     displacementSprite.position.set(app.screen.width / 2, app.screen.height / 2);
-
-    // Don't run normal interactions during preloader
-    if (preloaderActive || !preloaderComplete) {
-      return;
-    }
 
     if (!inTransition) {
       slides.forEach((slide) => slide.filters = null);
@@ -762,8 +496,6 @@ async function initHeroDistortion() {
   const wheelTriggerThreshold = 60;
 
   const triggerScrollTransition = (step) => {
-    // Don't allow scroll transitions during preloader
-    if (preloaderActive || !preloaderComplete) return;
     if (scrollCooldown) return;
     beginTransition(step);
     scrollCooldown = true;
